@@ -79,23 +79,41 @@
   });
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v)),
     rnd = () => Math.floor(Math.random() * 4);
+
+  const BOOST = 5; // volume yahan se control karo (3 = halka, 5 = tez, 8 = bohot tez)
+
   function beep(f, d = 0.09, v = 0.07, ty = "sine") {
     if (mute) return;
     try {
-      AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+      if (!AC) {
+        if (navigator.audioSession) navigator.audioSession.type = "playback"; // iPhone silent mode me bhi bajega
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        // limiter: awaz tez hogi lekin phategi nahi
+        const lim = AC.createDynamicsCompressor();
+        lim.threshold.value = -6;
+        lim.knee.value = 6;
+        lim.ratio.value = 20;
+        lim.attack.value = 0.002;
+        lim.release.value = 0.1;
+        lim.connect(AC.destination);
+        AC.out = lim;
+      }
+      if (AC.state !== "running") AC.resume(); // mobile par audio unlock
+
       const o = AC.createOscillator(),
         g = AC.createGain(),
         t = AC.currentTime;
       o.type = ty;
       o.frequency.value = f;
-      g.gain.setValueAtTime(v, t);
+      g.gain.setValueAtTime(v * BOOST, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + d);
       o.connect(g);
-      g.connect(AC.destination);
+      g.connect(AC.out);
       o.start();
       o.stop(t + d);
     } catch (e) {}
   }
+
   function buzz(n) {
     try {
       navigator.vibrate && navigator.vibrate(n);
