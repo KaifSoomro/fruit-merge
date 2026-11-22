@@ -9,13 +9,13 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main class="app">
+<main class="app pre" id="app">
   <header class="hud">
     <div class="card"><small>Score</small><b id="score" aria-live="polite">0</b></div>
     <div class="card"><small>Best</small><b id="best">0</b></div>
     <div class="card next"><small>Next</small><img id="next" alt="Next fruit" width="34" height="34"></div>
     <button id="restart" class="icon" type="button" aria-label="Restart game">🔄</button>
-    <button id="mute" class="icon" type="button" aria-label="Toggle sound" aria-pressed="false">🔊</button>
+    <button id="gear" class="icon" type="button" aria-label="Settings">⚙️</button>
   </header>
   <div class="stage">
     <canvas id="c" aria-label="Fruit Merge game board. Tap or press Space to drop a fruit."></canvas>
@@ -26,6 +26,40 @@
   <p class="tip">Aim, then tap to drop. Match two of the same fruit to grow them.</p>
   <p class="tip">Made with ❤ by Kaif Soomro</p>
 </main>
+
+<!-- START SCREEN -->
+<section id="start" class="start" aria-label="Fruit Merge start screen">
+  <div class="floaters" aria-hidden="true">
+    <img src="images/cherry.svg" alt="" style="--l:8%;--t:10%;--s:54px;--d:-.4s">
+    <img src="images/strawberry.svg" alt="" style="--l:76%;--t:8%;--s:60px;--d:-1.6s">
+    <img src="images/grape.svg" alt="" style="--l:84%;--t:36%;--s:64px;--d:-2.4s">
+    <img src="images/orange.svg" alt="" style="--l:5%;--t:40%;--s:72px;--d:-1s">
+    <img src="images/apple.svg" alt="" style="--l:72%;--t:68%;--s:76px;--d:-3s">
+    <img src="images/pear.svg" alt="" style="--l:12%;--t:72%;--s:68px;--d:-2s">
+    <img src="images/peach.svg" alt="" style="--l:44%;--t:84%;--s:62px;--d:-.8s">
+    <img src="images/pineapple.svg" alt="" style="--l:42%;--t:3%;--s:66px;--d:-2.8s">
+  </div>
+  <button id="gearStart" class="icon gear" type="button" aria-label="Settings">⚙️</button>
+  <div class="start-card">
+    <img class="logo-fruit" src="images/watermelon.svg" alt="" width="120" height="120">
+    <h1 class="title"><span class="w1">Fruit</span><span class="w2">Merge</span></h1>
+    <button id="play" class="play" type="button">▶ Play</button>
+    <p class="best-line">🏆 Best: <b id="startBest">0</b></p>
+  </div>
+  <p class="credit">Made with ❤ by Kaif Soomro</p>
+</section>
+
+<!-- SETTINGS POPUP -->
+<div id="settings" class="modal" role="dialog" aria-modal="true" aria-labelledby="st" hidden>
+  <div class="sheet">
+    <div class="ribbon" id="st">⚙️ Settings</div>
+    <button id="closeX" class="x" type="button" aria-label="Close settings">✕</button>
+    <label class="row" style="--i:0"><span class="ico">🔊</span><span class="lbl">Sound<small>Pop &amp; merge effects</small></span><input id="optSound" class="sw" type="checkbox" role="switch"></label>
+    <label class="row" style="--i:1"><span class="ico">🎵</span><span class="lbl">Music<small>Cute background tune</small></span><input id="optMusic" class="sw" type="checkbox" role="switch"></label>
+    <label class="row" style="--i:2"><span class="ico">📳</span><span class="lbl">Vibration<small>Feel every merge</small></span><input id="optVibe" class="sw" type="checkbox" role="switch"></label>
+    <button id="done" class="play sm" type="button">Done</button>
+  </div>
+</div>
 <script src="game.js"></script>
 </body>
 </html>

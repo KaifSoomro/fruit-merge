@@ -54,7 +54,8 @@
     shake,
     combo,
     comboT,
-    mute = false,
+    started = false,
+    paused = false,
     flash = 0,
     wasD = false,
     goT,
@@ -64,7 +65,17 @@
   try {
     best = +localStorage.getItem("fm-best") || 0;
   } catch (e) {}
+  const S = { sound: true, music: true, vibe: true };
+  try {
+    Object.assign(S, JSON.parse(localStorage.getItem("fm-settings")) || {});
+  } catch (e) {}
+  const saveS = () => {
+    try {
+      localStorage.setItem("fm-settings", JSON.stringify(S));
+    } catch (e) {}
+  };
   $("best").textContent = best;
+  $("startBest").textContent = best;
   let loaded = 0;
   const imgs = N.map((n) => {
     const i = new Image();
@@ -80,15 +91,15 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v)),
     rnd = () => Math.floor(Math.random() * 4);
 
-  const BOOST = 5; // volume yahan se control karo (3 = halka, 5 = tez, 8 = bohot tez)
+  const BOOST = 5; // sound effects volume (3 = halka, 5 = tez, 8 = bohot tez)
+  const MUSIC_VOL = 1; // music volume (0.5 = halka, 1 = normal, 1.5 = tez)
 
-  function beep(f, d = 0.09, v = 0.07, ty = "sine") {
-    if (mute) return;
-    try {
-      if (!AC) {
+  // Audio engine: ek hi AudioContext, limiter + music bus (echo ke saath)
+  function audio() {
+    if (!AC) {
+      try {
         if (navigator.audioSession) navigator.audioSession.type = "playback"; // iPhone silent mode me bhi bajega
         AC = new (window.AudioContext || window.webkitAudioContext)();
-        // limiter: awaz tez hogi lekin phategi nahi
         const lim = AC.createDynamicsCompressor();
         lim.threshold.value = -6;
         lim.knee.value = 6;
@@ -97,9 +108,33 @@
         lim.release.value = 0.1;
         lim.connect(AC.destination);
         AC.out = lim;
+        const mg = AC.createGain(),
+          dl = AC.createDelay(),
+          fb = AC.createGain(),
+          wet = AC.createGain();
+        mg.gain.value = 0;
+        dl.delayTime.value = 0.29;
+        fb.gain.value = 0.28;
+        wet.gain.value = 0.35;
+        mg.connect(lim);
+        mg.connect(dl);
+        dl.connect(fb);
+        fb.connect(dl);
+        dl.connect(wet);
+        wet.connect(lim);
+        AC.mus = mg;
+      } catch (e) {
+        AC = null;
+        return null;
       }
-      if (AC.state !== "running") AC.resume(); // mobile par audio unlock
+    }
+    if (AC.state !== "running") AC.resume(); // mobile par audio unlock
+    return AC;
+  }
 
+  function beep(f, d = 0.09, v = 0.07, ty = "sine") {
+    if (!S.sound || !audio()) return;
+    try {
       const o = AC.createOscillator(),
         g = AC.createGain(),
         t = AC.currentTime;
@@ -114,9 +149,70 @@
     } catch (e) {}
   }
 
+  // ---------- Cute background music (music-box style, loop) ----------
+  const mf = (m) => 440 * Math.pow(2, (m - 69) / 12),
+    EIGHTH = 60 / 104 / 2,
+    CH = [[60, 64, 67], [57, 60, 64], [57, 60, 65], [59, 62, 67]],
+    BASS = [48, 45, 41, 43],
+    __ = null,
+    MEL = [
+      76, __, 72, __, 79, __, 76, __,
+      76, __, 72, __, 69, __, 72, __,
+      74, __, 77, __, 76, __, 74, __,
+      72, __, 74, __, 79, __, __, __,
+      79, __, 76, __, 72, __, 76, __,
+      81, __, 79, __, 76, __, 72, __,
+      77, __, 76, __, 74, __, 72, __,
+      71, __, 74, __, 72, __, __, __,
+    ];
+  let mTimer = 0,
+    mStep = 0,
+    mNext = 0;
+  function mnote(m, t, d, v) {
+    [[1, "triangle", 1], [2, "sine", 0.25]].forEach(([k, ty, a]) => {
+      const o = AC.createOscillator(),
+        g = AC.createGain();
+      o.type = ty;
+      o.frequency.value = mf(m) * k;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(v * a, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g);
+      g.connect(AC.mus);
+      o.start(t);
+      o.stop(t + d + 0.05);
+    });
+  }
+  function mstep(i, t) {
+    const bar = i >> 3,
+      s = i & 7,
+      ch = CH[bar & 3];
+    mnote(ch[[0, 1, 2, 1, 0, 1, 2, 1][s]], t, 0.5, 0.14); // arpeggio
+    if (MEL[i] != null) mnote(MEL[i], t, 0.9, 0.3); // melody
+    if (s === 0 || s === 4) mnote(BASS[bar & 3], t, 0.6, 0.3); // bass
+  }
+  function musicOn() {
+    if (!S.music || !started || !audio()) return;
+    AC.mus.gain.setTargetAtTime(MUSIC_VOL, AC.currentTime, 0.08);
+    if (mTimer) return;
+    mNext = AC.currentTime + 0.12;
+    mTimer = setInterval(() => {
+      while (mNext < AC.currentTime + 0.35) {
+        mstep(mStep, mNext);
+        mNext += EIGHTH;
+        mStep = (mStep + 1) % 64;
+      }
+    }, 90);
+  }
+  function musicOff() {
+    if (AC && AC.mus) AC.mus.gain.setTargetAtTime(0, AC.currentTime, 0.06);
+    clearInterval(mTimer);
+    mTimer = 0;
+  }
+
   function buzz(n) {
     try {
-      navigator.vibrate && navigator.vibrate(n);
+      S.vibe && navigator.vibrate && navigator.vibrate(n);
     } catch (e) {}
   }
   function setNext() {
@@ -145,7 +241,7 @@
     $("over").hidden = true;
   }
   function drop() {
-    if (over || cool > 0) return;
+    if (!started || paused || over || cool > 0) return;
     const r = RAD[cur];
     balls.push({
       x: clamp(aimX, L + r, R - r),
@@ -441,7 +537,7 @@
     last = ts;
     while (acc >= 16.67) {
       acc -= 16.67;
-      if (!over) {
+      if (!over && started && !paused) {
         physics();
         if (cool > 0) cool--;
       }
@@ -463,6 +559,7 @@
     drop();
   });
   addEventListener("keydown", (e) => {
+    if (!started || paused) return;
     if (e.key === "ArrowLeft") aimX -= 14;
     else if (e.key === "ArrowRight") aimX += 14;
     else if (e.key === "r" || e.key === "R") reset();
@@ -476,12 +573,85 @@
     reset();
     beep(520, 0.08, 0.06);
   };
-  $("mute").onclick = (e) => {
-    mute = !mute;
-    e.currentTarget.textContent = mute ? "🔇" : "🔊";
-    e.currentTarget.setAttribute("aria-pressed", mute);
+  // ---------- Start screen ----------
+  const startEl = $("start"),
+    appEl = $("app");
+  $("play").onclick = (e) => {
+    if (started) return;
+    started = true;
+    const r = e.currentTarget.getBoundingClientRect();
+    startEl.style.setProperty("--cx", r.left + r.width / 2 + "px");
+    startEl.style.setProperty("--cy", r.top + r.height / 2 + "px");
+    startEl.classList.add("leaving");
+    reset();
+    beep(523, 0.1, 0.08);
+    setTimeout(() => beep(659, 0.1, 0.08), 90);
+    setTimeout(() => beep(784, 0.18, 0.08), 180);
+    buzz(15);
+    musicOn();
+    setTimeout(() => appEl.classList.remove("pre"), RM ? 0 : 250);
+    setTimeout(() => (startEl.hidden = true), RM ? 200 : 800);
   };
+
+  // ---------- Settings popup ----------
+  const setEl = $("settings"),
+    opts = { sound: $("optSound"), music: $("optMusic"), vibe: $("optVibe") };
+  let lastFocus = null;
+  for (const k in opts) {
+    opts[k].checked = S[k];
+    opts[k].onchange = () => {
+      S[k] = opts[k].checked;
+      saveS();
+      if (k === "music") S.music ? musicOn() : musicOff();
+      if (k === "vibe" && S.vibe) buzz(20);
+      beep(S[k] ? 740 : 420, 0.07, 0.07);
+    };
+  }
+  function openSettings() {
+    if (!setEl.hidden) return;
+    lastFocus = document.activeElement;
+    paused = true;
+    setEl.classList.remove("closing");
+    setEl.hidden = false;
+    beep(420, 0.07, 0.07); // pop sound
+    setTimeout(() => beep(640, 0.1, 0.07), 70);
+    $("done").focus({ preventScroll: true });
+  }
+  function closeSettings() {
+    if (setEl.hidden || setEl.classList.contains("closing")) return;
+    setEl.classList.add("closing");
+    beep(640, 0.06, 0.07);
+    setTimeout(() => beep(420, 0.09, 0.07), 60);
+    setTimeout(
+      () => {
+        setEl.hidden = true;
+        setEl.classList.remove("closing");
+        paused = false;
+        if (lastFocus && lastFocus.isConnected)
+          lastFocus.focus({ preventScroll: true });
+      },
+      RM ? 0 : 180,
+    );
+  }
+  $("gear").onclick = $("gearStart").onclick = openSettings;
+  $("done").onclick = $("closeX").onclick = closeSettings;
+  setEl.addEventListener("pointerdown", (e) => {
+    if (e.target === setEl) closeSettings();
+  });
+  addEventListener("keydown", (e) => {
+    if (setEl.hidden) return;
+    if (e.key === "Escape") closeSettings();
+    else if (e.key === "Tab") {
+      const f = [$("closeX"), opts.sound, opts.music, opts.vibe, $("done")],
+        i = f.indexOf(document.activeElement),
+        n = (i + (e.shiftKey ? -1 : 1) + f.length) % f.length;
+      e.preventDefault();
+      f[n].focus();
+    }
+  });
   document.addEventListener("visibilitychange", () => {
     acc = 0;
+    if (!AC) return;
+    document.hidden ? AC.suspend() : AC.resume();
   });
 })();
