@@ -324,14 +324,14 @@ button:focus-visible {
   animation: scaleIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .logo-fruit {
-  width: 120px;
-  height: 120px;
+  width: 230px;
+  height: 230px;
   filter: drop-shadow(0 10px 8px #0003);
   animation: squish 2.4s ease-in-out infinite;
 }
 @keyframes squish {
   0%, 100% { transform: scale(1, 1) rotate(-4deg); }
-  50% { transform: scale(1.08, 0.94) rotate(4deg); }
+  50% { transform: scale(0.95, 0.98) rotate(4deg); }
 }
 .title {
   margin: 0;
