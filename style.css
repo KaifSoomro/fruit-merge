@@ -49,7 +49,7 @@ body {
   animation: rise 0.3s var(--ease) both;
 }
 .app {
-  --w: min(100%, 420px, calc((100dvh - 150px) * 0.643));
+  --w: min(100%, 420px, calc((100dvh - 172px) * 0.643));
 }
 .card {
   flex: 1;
@@ -549,3 +549,51 @@ canvas{position:relative;z-index:1;background:none;border:0;border-radius:0;box-
 .bk{z-index:0;filter:drop-shadow(0 8px 8px #0003)}
 .fr{z-index:2;filter:drop-shadow(0 5px 4px #0004)}
 #over{z-index:4}
+
+/* ---------- Power ball button ---------- */
+.icon.pw {
+  position: relative;
+  font-size: 22px;
+  transition:
+    transform 0.12s ease,
+    background 0.2s ease,
+    opacity 0.2s ease;
+}
+.icon.pw:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.icon.pw #pwn {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+.icon.pw.has {
+  background: #ffe08a;
+  animation: pwglow 1.2s ease-in-out infinite;
+}
+.icon.pw.armed {
+  background: #ff9f1c;
+  box-shadow: 0 0 0 3px #fff, 0 0 16px 4px #ff9f1c;
+  animation: none;
+}
+@keyframes pwglow {
+  50% {
+    box-shadow: 0 0 14px 3px #ffb300;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon.pw.has {
+    animation: none;
+  }
+}

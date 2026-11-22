@@ -1,3 +1,4 @@
+
 (() => {
   const W = 360,
     H = 560,
@@ -31,6 +32,13 @@
     "#8fd14f",
     "#2f9e44",
   ];
+  const PNG = new Set(["strawberry", "grape", "orange", "apple", "peach", "pear", "watermelon", "pineapple"]);
+  const src = (n) => "images/" + n + (PNG.has(n) ? ".png" : ".svg");
+  const FIT = N.map((n) => (PNG.has(n) ? 0.86 : 1));
+  const PR = 20, 
+    BLAST = 65, 
+    COMBO_FOR_POWER = 5, 
+    MAXSTOCK = 3;
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const $ = (id) => document.getElementById(id),
     cv = $("c"),
@@ -59,6 +67,8 @@
     flash = 0,
     wasD = false,
     goT,
+    stock = 0,
+    armed = false,
     AC,
     last = 0,
     acc = 0;
@@ -85,20 +95,19 @@
         requestAnimationFrame(loop);
       }
     };
-    i.src = "images/" + n + ".svg";
+    i.src = src(n);
     return i;
   });
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v)),
     rnd = () => Math.floor(Math.random() * 4);
 
-  const BOOST = 5; // sound effects volume (3 = halka, 5 = tez, 8 = bohot tez)
-  const MUSIC_VOL = 1; // music volume (0.5 = halka, 1 = normal, 1.5 = tez)
+  const BOOST = 5; 
+  const MUSIC_VOL = 1; 
 
-  // Audio engine: ek hi AudioContext, limiter + music bus (echo ke saath)
   function audio() {
     if (!AC) {
       try {
-        if (navigator.audioSession) navigator.audioSession.type = "playback"; // iPhone silent mode me bhi bajega
+        if (navigator.audioSession) navigator.audioSession.type = "playback"; 
         AC = new (window.AudioContext || window.webkitAudioContext)();
         const lim = AC.createDynamicsCompressor();
         lim.threshold.value = -6;
@@ -128,7 +137,7 @@
         return null;
       }
     }
-    if (AC.state !== "running") AC.resume(); // mobile par audio unlock
+    if (AC.state !== "running") AC.resume(); 
     return AC;
   }
 
@@ -149,7 +158,6 @@
     } catch (e) {}
   }
 
-  // ---------- Cute background music (music-box style, loop) ----------
   const mf = (m) => 440 * Math.pow(2, (m - 69) / 12),
     EIGHTH = 60 / 104 / 2,
     CH = [[60, 64, 67], [57, 60, 64], [57, 60, 65], [59, 62, 67]],
@@ -187,9 +195,9 @@
     const bar = i >> 3,
       s = i & 7,
       ch = CH[bar & 3];
-    mnote(ch[[0, 1, 2, 1, 0, 1, 2, 1][s]], t, 0.5, 0.14); // arpeggio
-    if (MEL[i] != null) mnote(MEL[i], t, 0.9, 0.3); // melody
-    if (s === 0 || s === 4) mnote(BASS[bar & 3], t, 0.6, 0.3); // bass
+    mnote(ch[[0, 1, 2, 1, 0, 1, 2, 1][s]], t, 0.5, 0.14);
+    if (MEL[i] != null) mnote(MEL[i], t, 0.9, 0.3);
+    if (s === 0 || s === 4) mnote(BASS[bar & 3], t, 0.6, 0.3);
   }
   function musicOn() {
     if (!S.music || !started || !audio()) return;
@@ -216,7 +224,7 @@
     } catch (e) {}
   }
   function setNext() {
-    $("next").src = "images/" + N[nxt] + ".svg";
+    $("next").src = src(N[nxt]);
   }
   function reset() {
     balls = [];
@@ -236,12 +244,36 @@
     stage.className = "stage";
     combo = 0;
     comboT = 0;
+    stock = 0;
+    armed = false;
+    updPower();
     $("score").textContent = 0;
     setNext();
     $("over").hidden = true;
   }
   function drop() {
     if (!started || paused || over || cool > 0) return;
+    if (armed) {
+      balls.push({
+        x: clamp(aimX, L + PR, R - PR),
+        y: LINE - PR - 6,
+        vx: 0,
+        vy: 0,
+        t: -1,
+        pw: 1,
+        r: PR,
+        age: 0,
+        a: 0,
+        s: 1,
+        sv: 0,
+      });
+      stock--;
+      armed = false;
+      updPower();
+      beep(200, 0.12, 0.07, "sawtooth");
+      cool = 28;
+      return;
+    }
     const r = RAD[cur];
     balls.push({
       x: clamp(aimX, L + r, R - r),
@@ -270,7 +302,93 @@
     e.classList.add("bump");
     pops.push({ x, y, t: "+" + n, life: 1 });
   }
+  function updPower() {
+    const b = $("power");
+    $("pwn").textContent = stock;
+    b.disabled = stock === 0 && !armed;
+    b.classList.toggle("armed", armed);
+    b.classList.toggle("has", stock > 0);
+    b.setAttribute("aria-pressed", armed);
+  }
+  function togglePower() {
+    if (!started || paused || over) return;
+    if (armed) armed = false;
+    else if (stock > 0) armed = true;
+    else return;
+    updPower();
+    beep(armed ? 880 : 500, 0.08, 0.07, "triangle");
+    buzz(10);
+  }
+  function givePower(x, y) {
+    if (stock < MAXSTOCK) stock++;
+    else add(50, x, y - 10);
+    updPower();
+    pops.push({ x, y: y - 28, t: "\u26A1 POWER BALL!", life: 1.5 });
+    fx.push({ k: "ring", x, y, r: 20, c: "#ffb300", life: 1, g: 60 });
+    [660, 880, 1175].forEach((f, i) =>
+      setTimeout(() => beep(f, 0.12, 0.08, "triangle"), i * 80),
+    );
+    buzz([20, 30, 20]);
+  }
+  function boom(p) {
+    p.dead = 1;
+    const x = p.x,
+      y = p.y;
+    let n = 0,
+      sum = 0;
+    for (const b of balls) {
+      if (b.dead) continue;
+      const dx = b.x - x,
+        dy = b.y - y,
+        d = Math.hypot(dx, dy) || 1;
+      if (d - b.r < BLAST) {
+        b.dead = 1;
+        n++;
+        sum += ((b.t + 1) * (b.t + 2)) / 2 + 5;
+        fx.push({ k: "ring", x: b.x, y: b.y, r: b.r * 0.6, c: COL[b.t], life: 1 });
+        for (let k = 0; k < (RM ? 0 : 6); k++) {
+          const g = Math.random() * 6.28,
+            v = 2 + Math.random() * 4;
+          fx.push({
+            k: "dot",
+            x: b.x,
+            y: b.y,
+            vx: Math.cos(g) * v,
+            vy: Math.sin(g) * v - 1,
+            c: COL[b.t],
+            life: 1,
+          });
+        }
+      } else if (d < BLAST * 2.4) {
+        const k = 3.5 * (1 - d / (BLAST * 2.4));
+        b.vx += (dx / d) * k;
+        b.vy += (dy / d) * k - 0.5;
+      }
+    }
+    fx.push({ k: "ring", x, y, r: 10, c: "#ffb300", life: 1, g: BLAST * 1.1 });
+    fx.push({ k: "ring", x, y, r: 6, c: "#ff5a00", life: 1, g: BLAST * 0.7 });
+    for (let k = 0; k < (RM ? 0 : 24); k++) {
+      const g = Math.random() * 6.28,
+        v = 3 + Math.random() * 6;
+      fx.push({
+        k: "dot",
+        x,
+        y,
+        vx: Math.cos(g) * v,
+        vy: Math.sin(g) * v,
+        c: k % 2 ? "#ffd43b" : "#ff6a00",
+        life: 1,
+      });
+    }
+    if (n) add(Math.round(sum * (1 + 0.25 * n)), x, y);
+    if (!RM) shake = 12;
+    beep(90, 0.35, 0.14, "sawtooth");
+    beep(180, 0.2, 0.1, "square");
+    setTimeout(() => beep(420, 0.15, 0.08, "triangle"), 80);
+    buzz([30, 20, 60]);
+  }
   function physics() {
+    const bombs = [];
     for (const b of balls) {
       b.age++;
       b.vy += G;
@@ -291,6 +409,10 @@
         b.vx *= -0.2;
       }
       if (b.y + b.r > F) {
+        if (b.pw && !b.boom) {
+          b.boom = 1;
+          bombs.push(b);
+        }
         if (b.vy > 4 && !RM) b.sv -= 0.03 * b.vy;
         b.y = F - b.r;
         b.vy *= -0.2;
@@ -309,6 +431,14 @@
           if (Math.abs(dx) > rs || Math.abs(dy) > rs) continue;
           const d = Math.hypot(dx, dy);
           if (d >= rs || !d) continue;
+          if (a.pw || b.pw) {
+            const p = a.pw ? a : b;
+            if (!a.dead && !b.dead && !p.boom) {
+              p.boom = 1;
+              bombs.push(p);
+            }
+            continue;
+          }
           if (a.t === b.t && !a.dead && !b.dead) {
             a.dead = b.dead = 1;
             m.push([a, b]);
@@ -341,6 +471,7 @@
         t = a.t + 1;
       combo = comboT > 0 ? combo + 1 : 1;
       comboT = 70;
+      if (combo % COMBO_FOR_POWER === 0) givePower(x, y);
       fx.push({ k: "ring", x, y, r: a.r, c: COL[a.t], life: 1 });
       for (let k = 0; k < (RM ? 0 : 12); k++) {
         const g = Math.random() * 6.28,
@@ -374,11 +505,12 @@
           sv: 0,
         });
     }
-    if (m.length) balls = balls.filter((b) => !b.dead);
+    for (const p of bombs) if (!p.dead) boom(p);
+    if (m.length || bombs.length) balls = balls.filter((b) => !b.dead);
     if (comboT > 0) comboT--;
     let danger = false;
     for (const b of balls)
-      if (b.age > 60 && b.y - b.r < LINE && Math.abs(b.vy) < 1.5) danger = true;
+      if (!b.pw && b.age > 60 && b.y - b.r < LINE && Math.abs(b.vy) < 1.5) danger = true;
     overT = danger ? overT + 1 : Math.max(0, overT - 2);
     if (danger && overT % 30 === 1) beep(500 + overT * 3, 0.07, 0.06, "square");
     const dg = overT > 0;
@@ -418,20 +550,108 @@
       RM ? 0 : 900,
     );
   }
+  const BUB = {};
+  function highlights(g, r) {
+    g.save();
+    g.rotate(-0.72);
+    const hg = g.createLinearGradient(0, -r * 0.8, 0, -r * 0.5);
+    hg.addColorStop(0, "rgba(255,255,255,.95)");
+    hg.addColorStop(1, "rgba(255,255,255,.25)");
+    g.fillStyle = hg;
+    g.beginPath();
+    g.ellipse(0, -r * 0.66, r * 0.34, r * 0.12, 0, 0, 7);
+    g.fill();
+    g.restore();
+    g.fillStyle = "rgba(255,255,255,.85)";
+    g.beginPath();
+    g.arc(-r * 0.66, -r * 0.14, Math.max(1, r * 0.06), 0, 7);
+    g.fill();
+    g.strokeStyle = "rgba(255,255,255,.4)";
+    g.lineWidth = Math.max(1.2, r * 0.07);
+    g.lineCap = "round";
+    g.beginPath();
+    g.arc(0, 0, r * 0.84, 0.18 * Math.PI, 0.46 * Math.PI);
+    g.stroke();
+  }
+  function bubble(t, r) {
+    if (BUB[t]) return BUB[t];
+    const pw = t < 0,
+      c = pw ? "#ffb300" : COL[t],
+      sz = Math.ceil((r + 4) * 2),
+      cvs = document.createElement("canvas");
+    cvs.width = cvs.height = sz * dpr;
+    const g = cvs.getContext("2d");
+    g.scale(dpr, dpr);
+    g.translate(sz / 2, sz / 2);
+    if (pw) {
+      const core = g.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r);
+      core.addColorStop(0, "#fff7c2");
+      core.addColorStop(0.45, "#ffc928");
+      core.addColorStop(1, "#ff6a00");
+      g.fillStyle = core;
+      g.beginPath();
+      g.arc(0, 0, r, 0, 7);
+      g.fill();
+      g.strokeStyle = "#b34700";
+      g.lineWidth = 2;
+      g.stroke();
+      g.fillStyle = "#fff";
+      g.strokeStyle = "#b34700";
+      g.lineWidth = 1.4;
+      g.lineJoin = "round";
+      g.beginPath();
+      [[0.15, -0.7], [-0.45, 0.1], [-0.05, 0.1], [-0.2, 0.75], [0.45, -0.15], [0.05, -0.15]].forEach(
+        ([px, py], i) => (i ? g.lineTo(px * r, py * r) : g.moveTo(px * r, py * r)),
+      );
+      g.closePath();
+      g.fill();
+      g.stroke();
+    } else {
+      const body = g.createRadialGradient(0, 0, r * 0.5, 0, 0, r);
+      body.addColorStop(0, c + "00");
+      body.addColorStop(0.8, c + "24");
+      body.addColorStop(1, c + "70");
+      g.fillStyle = body;
+      g.beginPath();
+      g.arc(0, 0, r, 0, 7);
+      g.fill();
+      const rim = g.createLinearGradient(-r, -r, r, r);
+      rim.addColorStop(0, "rgba(255,255,255,.95)");
+      rim.addColorStop(0.4, c + "88");
+      rim.addColorStop(0.72, "rgba(120,220,255,.65)");
+      rim.addColorStop(1, "rgba(255,150,225,.75)");
+      g.strokeStyle = rim;
+      g.lineWidth = Math.max(1.6, r * 0.05);
+      g.beginPath();
+      g.arc(0, 0, r - 1, 0, 7);
+      g.stroke();
+    }
+    highlights(g, r);
+    return (BUB[t] = { cvs, sz });
+  }
   function ball(x, y, r, t, s, a) {
+    const ga = ctx.globalAlpha;
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(s, s);
-    ctx.fillStyle = COL[t] + "3a";
-    ctx.strokeStyle = COL[t] + "aa";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, 7);
-    ctx.fill();
-    ctx.stroke();
-    ctx.rotate(a * 0.5);
-    const z = r * 2 * 0.98;
-    ctx.drawImage(imgs[t], -z / 2, -z / 2, z, z);
+    if (t < 0) {
+      const k = 1 + 0.1 * Math.sin(performance.now() / 110);
+      ctx.globalAlpha = ga * 0.3;
+      ctx.fillStyle = "#ffb300";
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.45 * k, 0, 7);
+      ctx.fill();
+      ctx.globalAlpha = ga;
+    } else {
+      ctx.save();
+      ctx.rotate(a * 0.5);
+      const z = r * 2 * FIT[t];
+      ctx.drawImage(imgs[t], -z / 2, -z / 2, z, z);
+      ctx.restore();
+    }
+    const b = bubble(t, t < 0 ? PR : RAD[t]);
+    const q = (r / (t < 0 ? PR : RAD[t])) * b.sz;
+    ctx.drawImage(b.cvs, -q / 2, -q / 2, q, q);
     ctx.restore();
   }
   function draw() {
@@ -470,7 +690,7 @@
       );
     }
     if (!over) {
-      const r = RAD[cur],
+      const r = armed ? PR : RAD[cur],
         x = clamp(aimX, L + r, R - r);
       ctx.globalAlpha = 0.22;
       ctx.strokeStyle = "#888";
@@ -479,7 +699,7 @@
       ctx.lineTo(x, F);
       ctx.stroke();
       ctx.globalAlpha = cool > 0 ? 0.45 : 1;
-      ball(x, LINE - r - 6, r, cur, 1, 0);
+      ball(x, LINE - r - 6, r, armed ? -1 : cur, 1, 0);
       ctx.globalAlpha = 1;
     }
     for (const b of balls) ball(b.x, b.y, b.r, b.t, Math.max(0.1, b.s), b.a);
@@ -489,7 +709,7 @@
         ctx.strokeStyle = p.c;
         ctx.lineWidth = 5 * p.life;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r + (1 - p.life) * 40, 0, 7);
+        ctx.arc(p.x, p.y, p.r + (1 - p.life) * (p.g || 40), 0, 7);
         ctx.stroke();
         p.life -= 0.06;
       } else {
@@ -510,9 +730,10 @@
       ctx.globalAlpha = Math.max(0, p.life);
       ctx.lineWidth = 4;
       ctx.strokeStyle = "#fff";
-      ctx.strokeText(p.t, p.x, p.y);
+      const px = clamp(p.x, L + ctx.measureText(p.t).width / 2 + 4, R - ctx.measureText(p.t).width / 2 - 4);
+      ctx.strokeText(p.t, px, p.y);
       ctx.fillStyle = "#d9480f";
-      ctx.fillText(p.t, p.x, p.y);
+      ctx.fillText(p.t, px, p.y);
       p.y -= 0.8;
       p.life -= 0.02;
     }
@@ -563,17 +784,19 @@
     if (e.key === "ArrowLeft") aimX -= 14;
     else if (e.key === "ArrowRight") aimX += 14;
     else if (e.key === "r" || e.key === "R") reset();
+    else if (e.key === "p" || e.key === "P" || e.key === "b" || e.key === "B")
+      togglePower();
     else if (e.key === " " && !over) {
       e.preventDefault();
       drop();
     }
   });
+  $("power").onclick = togglePower;
   $("again").onclick = reset;
   $("restart").onclick = () => {
     reset();
     beep(520, 0.08, 0.06);
   };
-  // ---------- Start screen ----------
   const startEl = $("start"),
     appEl = $("app");
   $("play").onclick = (e) => {
@@ -593,7 +816,6 @@
     setTimeout(() => (startEl.hidden = true), RM ? 200 : 800);
   };
 
-  // ---------- Settings popup ----------
   const setEl = $("settings"),
     opts = { sound: $("optSound"), music: $("optMusic"), vibe: $("optVibe") };
   let lastFocus = null;
@@ -613,7 +835,7 @@
     paused = true;
     setEl.classList.remove("closing");
     setEl.hidden = false;
-    beep(420, 0.07, 0.07); // pop sound
+    beep(420, 0.07, 0.07);
     setTimeout(() => beep(640, 0.1, 0.07), 70);
     $("done").focus({ preventScroll: true });
   }
